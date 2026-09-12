@@ -1,0 +1,117 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "JJS Mod Menu",
+   LoadingTitle = "Gojo 0.2s Unlimited Void",
+   LoadingSubtitle = "by Assistant",
+   ConfigurationSaving = { Enabled = false },
+   Discord = { Enabled = false },
+   KeySystem = false
+})
+
+local MainTab = Window:CreateTab("Main Mod", 4483362458)
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local isGojoActive = false
+local isSpectating = false
+local selectedPlayerName = ""
+
+-- Chức năng Gojo 0.2s: TP bám sau lưng All Player
+MainTab:CreateToggle({
+   Name = "Gojo 0.2s (TP All Player)",
+   CurrentValue = false,
+   Flag = "GojoToggle",
+   Callback = function(Value)
+      isGojoActive = Value
+
+      if isGojoActive then
+         task.spawn(function()
+            while isGojoActive do
+               for _, targetPlayer in ipairs(Players:GetPlayers()) do
+                  if not isGojoActive then break end
+
+                  if targetPlayer ~= LocalPlayer and targetPlayer.Character then
+                     local targetHRP = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+                     local targetHumanoid = targetPlayer.Character:FindFirstChild("Humanoid")
+                     local myChar = LocalPlayer.Character
+                     local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+
+                     -- Chỉ TP tới player còn sống
+                     if targetHRP and targetHumanoid and myHRP and targetHumanoid.Health > 0 then
+                        -- TP bám 1 stud sau lưng
+                        myHRP.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 1)
+                     end
+                  end
+                  
+                  -- Delay 0.005s giữa các lần dịch chuyển
+                  task.wait(0.005)
+               end
+            end
+         end)
+      end
+   end,
+})
+
+-- Section Xem Góc Nhìn (Spectate)
+MainTab:CreateSection("Xem Góc Nhìn (Spectate)")
+
+local function getPlayerList()
+   local list = {}
+   for _, p in ipairs(Players:GetPlayers()) do
+      if p ~= LocalPlayer then
+         table.insert(list, p.Name)
+      end
+   end
+   return list
+end
+
+local PlayerDropdown = MainTab:CreateDropdown({
+   Name = "Chọn Player Cần Xem",
+   Options = getPlayerList(),
+   CurrentOption = "",
+   MultipleOptions = false,
+   Flag = "SpectateDropdown",
+   Callback = function(Option)
+      selectedPlayerName = Option[1] or Option
+      if isSpectating then
+         local target = Players:FindFirstChild(selectedPlayerName)
+         if target and target.Character and target.Character:FindFirstChild("Humanoid") then
+            Camera.CameraSubject = target.Character.Humanoid
+         end
+      end
+   end,
+})
+
+MainTab:CreateButton({
+   Name = "Làm Mới Danh Sách Player",
+   Callback = function()
+      PlayerDropdown:Refresh(getPlayerList())
+   end,
+})
+
+MainTab:CreateToggle({
+   Name = "Bật/Tắt Xem Góc Nhìn",
+   CurrentValue = false,
+   Flag = "SpectateToggle",
+   Callback = function(Value)
+      isSpectating = Value
+
+      if isSpectating then
+         local target = Players:FindFirstChild(selectedPlayerName)
+         if target and target.Character and target.Character:FindFirstChild("Humanoid") then
+            Camera.CameraSubject = target.Character.Humanoid
+            Rayfield:Notify({Title = "Spectate", Content = "Đang xem góc nhìn của: " .. selectedPlayerName, Duration = 2})
+         else
+            Rayfield:Notify({Title = "Cảnh báo", Content = "Hãy chọn 1 Player hợp lệ!", Duration = 2})
+         end
+      else
+         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            Camera.CameraSubject = LocalPlayer.Character.Humanoid
+         end
+         Rayfield:Notify({Title = "Spectate", Content = "Đã trở về góc nhìn bản thân", Duration = 2})
+      end
+   end,
+})
