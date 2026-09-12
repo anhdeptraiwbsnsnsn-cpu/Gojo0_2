@@ -1,0 +1,114 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "JJS Mod Menu",
+   LoadingTitle = "Gojo 0.2s Unlimited Void",
+   LoadingSubtitle = "by Assistant",
+   ConfigurationSaving = { Enabled = false },
+   Discord = { Enabled = false },
+   KeySystem = false
+})
+
+local MainTab = Window:CreateTab("Main Mod", 4483362458)
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local isGojoActive = false
+local isSpectating = false
+local selectedPlayerName = ""
+
+-- Gojo 0.2s Feature
+MainTab:CreateToggle({
+   Name = "Gojo 0.2s",
+   CurrentValue = false,
+   Flag = "GojoToggle",
+   Callback = function(Value)
+      isGojoActive = Value
+
+      if isGojoActive then
+         task.spawn(function()
+            while isGojoActive do
+               for _, targetPlayer in ipairs(Players:GetPlayers()) do
+                  if not isGojoActive then break end
+
+                  if targetPlayer ~= LocalPlayer and targetPlayer.Character then
+                     local targetHRP = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+                     local targetHumanoid = targetPlayer.Character:FindFirstChild("Humanoid")
+                     local myChar = LocalPlayer.Character
+                     local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+
+                     if targetHRP and targetHumanoid and myHRP and targetHumanoid.Health > 0 then
+                        myHRP.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 1)
+                     end
+                  end
+                  
+                  task.wait(0.005)
+               end
+            end
+         end)
+      end
+   end,
+})
+
+-- Spectate Section
+MainTab:CreateSection("Spectate")
+
+local function getPlayerList()
+   local list = {}
+   for _, p in ipairs(Players:GetPlayers()) do
+      if p ~= LocalPlayer then
+         table.insert(list, p.Name)
+      end
+   end
+   return list
+end
+
+local PlayerDropdown = MainTab:CreateDropdown({
+   Name = "Select Player",
+   Options = getPlayerList(),
+   CurrentOption = "",
+   MultipleOptions = false,
+   Flag = "SpectateDropdown",
+   Callback = function(Option)
+      selectedPlayerName = Option[1] or Option
+      if isSpectating then
+         local target = Players:FindFirstChild(selectedPlayerName)
+         if target and target.Character and target.Character:FindFirstChild("Humanoid") then
+            Camera.CameraSubject = target.Character.Humanoid
+         end
+      end
+   end,
+})
+
+MainTab:CreateButton({
+   Name = "Refresh Player List",
+   Callback = function()
+      PlayerDropdown:Refresh(getPlayerList())
+   end,
+})
+
+MainTab:CreateToggle({
+   Name = "Spectate Mode",
+   CurrentValue = false,
+   Flag = "SpectateToggle",
+   Callback = function(Value)
+      isSpectating = Value
+
+      if isSpectating then
+         local target = Players:FindFirstChild(selectedPlayerName)
+         if target and target.Character and target.Character:FindFirstChild("Humanoid") then
+            Camera.CameraSubject = target.Character.Humanoid
+            Rayfield:Notify({Title = "Spectate", Content = "Spectating: " .. selectedPlayerName, Duration = 2})
+         else
+            Rayfield:Notify({Title = "Warning", Content = "Please select a valid player!", Duration = 2})
+         end
+      else
+         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            Camera.CameraSubject = LocalPlayer.Character.Humanoid
+         end
+         Rayfield:Notify({Title = "Spectate", Content = "Returned to local player view", Duration = 2})
+      end
+   end,
+})
