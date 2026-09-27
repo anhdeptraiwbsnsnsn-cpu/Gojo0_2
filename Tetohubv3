@@ -1,0 +1,521 @@
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+
+-- Services
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
+local Camera = workspace.CurrentCamera
+
+-- Global Variables
+local lockTargetPlayer = nil
+local orbitLockEnabled = false
+local speedEnabled, speedConnection = false, nil
+local noclipEnabled, noclipConnection = false, nil
+local killAllEnabled = false
+local esp2DEnabled, skeletonEnabled = false, false
+
+----------------------------------------------------
+-- NÚT TRÒN BẬT/TẮT MENU (IMAGE ID: 8271539061276)
+----------------------------------------------------
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TetoToggleButtonGui"
+ScreenGui.Parent = (gethui and gethui()) or CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+
+local ToggleBtn = Instance.new("ImageButton")
+ToggleBtn.Name = "ToggleMenuBtn"
+ToggleBtn.Parent = ScreenGui
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+ToggleBtn.Position = UDim2.new(0.1, 0, 0.2, 0)
+ToggleBtn.Size = UDim2.new(0, 50, 0, 50)
+ToggleBtn.Image = "rbxassetid://8271539061276"
+ToggleBtn.Active = true
+ToggleBtn.Draggable = true
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(1, 0)
+UICorner.Parent = ToggleBtn
+
+local UIStroke = Instance.new("UIStroke")
+UIStroke.Color = Color3.fromRGB(180, 80, 255)
+UIStroke.Thickness = 2
+UIStroke.Parent = ToggleBtn
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    if Fluent then
+        Fluent:Toggle()
+    end
+end)
+
+----------------------------------------------------
+-- KHỞI TẠO FLUENT WINDOW
+----------------------------------------------------
+local Window = Fluent:CreateWindow({
+    Title = "teto menu - jjs",
+    SubTitle = "Jujutsu Shenanigans Script",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+----------------------------------------------------
+-- KHỞI TẠO CÁC TAB CHỨC NĂNG
+----------------------------------------------------
+local MainTab = Window:AddTab({ Title = "Main", Icon = "home" })
+local CombatTab = Window:AddTab({ Title = "Combat", Icon = "sword" })
+local TPTab = Window:AddTab({ Title = "TP Locations", Icon = "map-pin" })
+local ESPTab = Window:AddTab({ Title = "ESP", Icon = "eye" })
+local MiscTab = Window:AddTab({ Title = "Misc", Icon = "more-horizontal" })
+
+----------------------------------------------------
+-- TAB MAIN
+----------------------------------------------------
+MainTab:AddToggle("SpeedToggle", {
+    Title = "Speed",
+    Default = false,
+    Callback = function(Value)
+        speedEnabled = Value
+        if speedEnabled then
+            speedConnection = RunService.RenderStepped:Connect(function()
+                local char = LocalPlayer.Character
+                if char and char:FindFirstChild("Humanoid") and char:FindFirstChild("HumanoidRootPart") then
+                    if char.Humanoid.MoveDirection.Magnitude > 0 then
+                        char:TranslateBy(char.Humanoid.MoveDirection * 0.8)
+                    end
+                end
+            end)
+        else
+            if speedConnection then speedConnection:Disconnect() end
+        end
+    end
+})
+
+MainTab:AddToggle("NoclipToggle", {
+    Title = "Noclip",
+    Default = false,
+    Callback = function(Value)
+        noclipEnabled = Value
+        if noclipEnabled then
+            noclipConnection = RunService.Stepped:Connect(function()
+                if LocalPlayer.Character then
+                    for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then part.CanCollide = false end
+                    end
+                end
+            end)
+        else
+            if noclipConnection then noclipConnection:Disconnect() end
+        end
+    end
+})
+
+MainTab:AddButton({
+    Title = "Hop Server",
+    Callback = function()
+        Fluent:Notify({ Title = "Hop Server", Content = "Đang tìm Server...", Duration = 3 })
+        local placeId = game.PlaceId
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100")).data
+        end)
+        if success and result then
+            for _, s in pairs(result) do
+                if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                    TeleportService:TeleportToPlaceInstance(placeId, s.id, LocalPlayer)
+                    break
+                end
+            end
+        else
+            Fluent:Notify({ Title = "Hop Server", Content = "Không thể lấy danh sách server!", Duration = 3 })
+        end
+    end
+})
+
+----------------------------------------------------
+-- TAB COMBAT
+----------------------------------------------------
+local targetInputText = ""
+CombatTab:AddInput("TargetInput", {
+    Title = "Tên Target",
+    Default = "",
+    Placeholder = "Nhập tên hoặc tên hiển thị...",
+    Callback = function(text)
+        targetInputText = text
+    end
+})
+
+CombatTab:AddButton({
+    Title = "Lock Target",
+    Callback = function()
+        if targetInputText ~= "" then
+            local name = targetInputText:lower()
+            lockTargetPlayer = nil
+            for _, p in pairs(Players:GetPlayers()) do
+                if p.Name:lower():find(name) or p.DisplayName:lower():find(name) then
+                    lockTargetPlayer = p
+                    Fluent:Notify({ Title = "Lock Target", Content = "Đã khóa: " .. p.Name, Duration = 3 })
+                    
+                    local myChar = LocalPlayer.Character
+                    if myChar and myChar:FindFirstChild("HumanoidRootPart") and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                        myChar.HumanoidRootPart.CFrame = p.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 2.5)
+                    end
+                    break
+                end
+            end
+            if not lockTargetPlayer then Fluent:Notify({ Title = "Lock Target", Content = "Không tìm thấy Player!", Duration = 3 }) end
+        end
+    end
+})
+
+CombatTab:AddButton({
+    Title = "Kích hoạt Black Flash Chain",
+    Callback = function()
+        Fluent:Notify({ Title = "Black Flash Chain", Content = "Đang chạy script...", Duration = 3 })
+        task.spawn(function()
+            pcall(function()
+                loadstring(game:HttpGet("https://pastebin.com/raw/aiy3qDuu"))()
+            end)
+        end)
+    end
+})
+
+CombatTab:AddToggle("OrbitToggle", {
+    Title = "Orbit Target (Quay Tam Giác)",
+    Default = false,
+    Callback = function(Value)
+        orbitLockEnabled = Value
+    end
+})
+
+local function executeTPAll()
+    local myChar = LocalPlayer.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            myChar.HumanoidRootPart.CFrame = p.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 2.5)
+            task.wait(0.005)
+        end
+    end
+end
+
+local function isMyGojoDomainActive()
+    local char = LocalPlayer.Character
+    if not char then return false end
+
+    for _, obj in ipairs(char:GetDescendants()) do
+        local nameLower = obj.Name:lower()
+        if nameLower:find("domain") or nameLower:find("infinite") or nameLower:find("unlimited") or nameLower:find("void") then
+            return true
+        end
+    end
+    return false
+end
+
+CombatTab:AddToggle("KillAllToggle", {
+    Title = "teto kill all",
+    Default = false,
+    Callback = function(Value)
+        killAllEnabled = Value
+        if killAllEnabled then
+            task.spawn(function()
+                local domainStartTime = nil
+
+                while killAllEnabled do
+                    local now = os.clock()
+
+                    if isMyGojoDomainActive() then
+                        if not domainStartTime then
+                            domainStartTime = now
+                        elseif (now - domainStartTime) >= 1.0 then
+                            Fluent:Notify({ Title = "Teto Kill All", Content = "Lãnh Địa Gojo kích hoạt đủ 1s! Bắt đầu TP ALL...", Duration = 3 })
+                            executeTPAll()
+                            domainStartTime = nil
+                        end
+                    else
+                        domainStartTime = nil
+                    end
+                    
+                    task.wait(0.03)
+                end
+            end)
+        end
+    end
+})
+
+CombatTab:AddButton({
+    Title = "Bypass AC (Thử nghiệm)",
+    Callback = function()
+        local char = LocalPlayer.Character
+        if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+
+        local target = lockTargetPlayer
+        if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                    target = p
+                    break
+                end
+            end
+        end
+
+        if not target then
+            Fluent:Notify({ Title = "Bypass AC", Content = "Chưa chọn Target!", Duration = 3 })
+            return
+        end
+
+        task.spawn(function()
+            local hrp = char.HumanoidRootPart
+            local oldPos = hrp.Position
+            local targetHrp = target.Character.HumanoidRootPart
+            local behindCFrame = targetHrp.CFrame * CFrame.new(0, 0, 2.5)
+            
+            hrp.CFrame = behindCFrame
+            task.wait(0.25)
+
+            local distFromOld = (hrp.Position - oldPos).Magnitude
+            local distFromBehind = (hrp.Position - behindCFrame.Position).Magnitude
+
+            if distFromBehind < 2.5 and distFromOld > 5 then
+                Fluent:Notify({ Title = "Bypass AC", Content = "Bypass AC: Thành Công!", Duration = 3 })
+            else
+                Fluent:Notify({ Title = "Bypass AC", Content = "Bypass AC: Thất Bại! Đang Reset...", Duration = 3 })
+                
+                pcall(function()
+                    ReplicatedStorage.Knit.Knit.Services.JoinService.RE.Reset:FireServer()
+                end)
+            end
+        end)
+    end
+})
+
+----------------------------------------------------
+-- TAB TP LOCATIONS
+----------------------------------------------------
+local jjsLocations = {
+    {"Main Spawn Area", Vector3.new(0, 10, 0)},
+    {"Rooftop / Building Top", Vector3.new(-50, 85, -120)},
+    {"Park Area", Vector3.new(120, 10, -80)},
+    {"School Yard", Vector3.new(-150, 10, 100)},
+    {"Destroyed City Zone", Vector3.new(200, 10, 150)},
+    {"Safe Sky Zone", Vector3.new(0, 500, 0)}
+}
+
+for _, loc in ipairs(jjsLocations) do
+    TPTab:AddButton({
+        Title = loc[1],
+        Callback = function()
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                char.HumanoidRootPart.CFrame = CFrame.new(loc[2])
+                Fluent:Notify({ Title = "Teleport", Content = "Đã TP đến: " .. loc[1], Duration = 3 })
+            end
+        end
+    })
+end
+
+----------------------------------------------------
+-- TAB ESP
+----------------------------------------------------
+ESPTab:AddToggle("ESP2DToggle", {
+    Title = "ESP 2D Box",
+    Default = false,
+    Callback = function(Value)
+        esp2DEnabled = Value
+    end
+})
+
+ESPTab:AddToggle("SkeletonToggle", {
+    Title = "ESP Skeleton",
+    Default = false,
+    Callback = function(Value)
+        skeletonEnabled = Value
+    end
+})
+
+-- LOGIC DRAWING ESP
+local ESPData = {}
+
+local function createESP(player)
+    if ESPData[player] then return end
+    
+    local data = {
+        Box = Drawing.new("Square"),
+        SkeletonLines = {}
+    }
+    
+    data.Box.Color = Color3.fromRGB(180, 80, 255)
+    data.Box.Thickness = 1.5
+    data.Box.Filled = false
+    data.Box.Visible = false
+
+    for i = 1, 10 do
+        local line = Drawing.new("Line")
+        line.Color = Color3.fromRGB(0, 255, 255)
+        line.Thickness = 1.5
+        line.Visible = false
+        table.insert(data.SkeletonLines, line)
+    end
+
+    ESPData[player] = data
+end
+
+local function removeESP(player)
+    if ESPData[player] then
+        ESPData[player].Box:Remove()
+        for _, line in ipairs(ESPData[player].SkeletonLines) do line:Remove() end
+        ESPData[player] = nil
+    end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then createESP(p) end
+end
+
+Players.PlayerAdded:Connect(function(p)
+    if p ~= LocalPlayer then createESP(p) end
+end)
+
+Players.PlayerRemoving:Connect(removeESP)
+
+RunService.RenderStepped:Connect(function()
+    for player, data in pairs(ESPData) do
+        local char = player.Character
+        if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+            local hrp = char.HumanoidRootPart
+            local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+
+            if esp2DEnabled and onScreen then
+                local head = char:FindFirstChild("Head")
+                if head then
+                    local headPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
+                    local legPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
+                    
+                    local height = math.abs(headPos.Y - legPos.Y)
+                    local width = height / 1.5
+
+                    data.Box.Size = Vector2.new(width, height)
+                    data.Box.Position = Vector2.new(pos.X - width / 2, pos.Y - height / 2)
+                    data.Box.Visible = true
+                else
+                    data.Box.Visible = false
+                end
+            else
+                data.Box.Visible = false
+            end
+
+            if skeletonEnabled and onScreen then
+                local head = char:FindFirstChild("Head")
+                local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+                local leftArm = char:FindFirstChild("Left Arm") or char:FindFirstChild("LeftHand")
+                local rightArm = char:FindFirstChild("Right Arm") or char:FindFirstChild("RightHand")
+                local leftLeg = char:FindFirstChild("Left Leg") or char:FindFirstChild("LeftFoot")
+                local rightLeg = char:FindFirstChild("Right Leg") or char:FindFirstChild("RightFoot")
+
+                if head and torso then
+                    local joints = {
+                        {head, torso},
+                        {torso, leftArm},
+                        {torso, rightArm},
+                        {torso, leftLeg},
+                        {torso, rightLeg}
+                    }
+
+                    for i, joint in ipairs(joints) do
+                        if joint[1] and joint[2] then
+                            local p1, vis1 = Camera:WorldToViewportPoint(joint[1].Position)
+                            local p2, vis2 = Camera:WorldToViewportPoint(joint[2].Position)
+
+                            if vis1 and vis2 then
+                                local line = data.SkeletonLines[i]
+                                line.From = Vector2.new(p1.X, p1.Y)
+                                line.To = Vector2.new(p2.X, p2.Y)
+                                line.Visible = true
+                            else
+                                data.SkeletonLines[i].Visible = false
+                            end
+                        else
+                            data.SkeletonLines[i].Visible = false
+                        end
+                    end
+                end
+            else
+                for _, line in ipairs(data.SkeletonLines) do line.Visible = false end
+            end
+        else
+            data.Box.Visible = false
+            for _, line in ipairs(data.SkeletonLines) do line.Visible = false end
+        end
+    end
+end)
+
+----------------------------------------------------
+-- TAB MISC
+----------------------------------------------------
+local miscTargetText = ""
+MiscTab:AddInput("MiscTargetInput", {
+    Title = "Tên Target (Misc)",
+    Default = "",
+    Placeholder = "Nhập tên Player...",
+    Callback = function(text)
+        miscTargetText = text
+    end
+})
+
+MiscTab:AddButton({
+    Title = "Lock Target",
+    Callback = function()
+        if miscTargetText ~= "" then
+            local name = miscTargetText:lower()
+            lockTargetPlayer = nil
+            for _, p in pairs(Players:GetPlayers()) do
+                if p.Name:lower():find(name) or p.DisplayName:lower():find(name) then
+                    lockTargetPlayer = p
+                    Fluent:Notify({ Title = "Lock Target", Content = "Đã khóa: " .. p.Name, Duration = 3 })
+                    
+                    local myChar = LocalPlayer.Character
+                    if myChar and myChar:FindFirstChild("HumanoidRootPart") and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                        myChar.HumanoidRootPart.CFrame = p.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 2.5)
+                    end
+                    break
+                end
+            end
+            if not lockTargetPlayer then Fluent:Notify({ Title = "Lock Target", Content = "Không tìm thấy Player!", Duration = 3 }) end
+        end
+    end
+})
+
+----------------------------------------------------
+-- LOGIC ORBIT TAM GIÁC
+----------------------------------------------------
+local orbitAngle = 0
+RunService.Heartbeat:Connect(function(dt)
+    if orbitLockEnabled and lockTargetPlayer and lockTargetPlayer.Character and lockTargetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local myChar = LocalPlayer.Character
+        if myChar and myChar:FindFirstChild("HumanoidRootPart") then
+            local targetHrp = lockTargetPlayer.Character.HumanoidRootPart
+            
+            orbitAngle = orbitAngle + dt * 14
+
+            local side = math.floor((orbitAngle / (math.pi * 2 / 3))) % 3
+            local radius = 5.5
+
+            local offsets = {
+                Vector3.new(0, 0, -radius),
+                Vector3.new(radius * 0.866, 0, radius * 0.5),
+                Vector3.new(-radius * 0.866, 0, radius * 0.5)
+            }
+
+            local currentOffset = offsets[side + 1]
+            local targetPos = targetHrp.Position + (targetHrp.CFrame:VectorToWorldSpace(currentOffset))
+
+            myChar.HumanoidRootPart.CFrame = CFrame.new(targetPos, targetHrp.Position)
+        end
+    end
+end)
+
+-- Tự động chọn Tab Main ngay khi mở UI
+MainTab:Select()
