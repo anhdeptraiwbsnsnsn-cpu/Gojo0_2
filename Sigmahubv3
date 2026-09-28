@@ -1,0 +1,709 @@
+-- Sigma Hub - Jujutsu Shenanigans (Fluent UI + Mobile Toggle Button)
+
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+
+-- Services
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
+
+-- Global Variables
+local speedEnabled, speedConnection = false, nil
+local noclipEnabled, noclipConnection = false, nil
+local auto02sUltEnabled, gojoLoopConnection = false, nil
+local esp2DEnabled, skeletonEnabled = false, false
+local invisibleEnabled = false
+local originalTransparencies = {}
+
+-- Bypass AC Variables
+local bypassACEnabled = false
+local bypassACThread = nil
+
+-- Fun Tab Variables
+local socLoDoing = false
+local socLoAnimTrack = nil
+local socLoThread = nil
+local flingTargetInputText = ""
+local Tune = { Power = 2.0, Duration = 3.0, Density = 2 }
+
+-- Fling Control Variables
+local currentFlingState = { active = false }
+local currentFlingOldPos = nil
+local currentSavedFPDH = -500
+
+-- Orbit Variables
+local orbitEnabled = false
+local orbitTargetPlayer = nil
+local orbitSpeed = 20
+local orbitDistance = 5
+local orbitAngle = 0
+local orbitConnection = nil
+local orbitTargetInputText = ""
+
+local function GetClosestTarget()
+    local closest, minDist = nil, math.huge
+    local myChar = LocalPlayer.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return nil end
+    local myPos = myChar.HumanoidRootPart.Position
+
+    for _, v in ipairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") and v.Character:FindFirstChild("Humanoid") then
+            if v.Character.Humanoid.Health > 0 then
+                local dist = (v.Character.HumanoidRootPart.Position - myPos).Magnitude
+                if dist < minDist then
+                    minDist = dist
+                    closest = v
+                end
+            end
+        end
+    end
+    return closest
+end
+
+----------------------------------------------------
+-- ADVANCED FLING & UN-FLING LOGIC
+----------------------------------------------------
+local function stopFling(State)
+    if State then State.active = false end
+end
+
+local function unFling(oldPosition, savedFPDH)
+    local Character = LocalPlayer.Character
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+    local RootPart = Humanoid and Humanoid.RootPart
+
+    if Humanoid then
+        workspace.CurrentCamera.CameraSubject = Humanoid
+        Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+        pcall(function() Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+    end
+
+    if RootPart and oldPosition then
+        RootPart.CFrame = oldPosition
+        Character:PivotTo(oldPosition)
+        
+        for _, part in ipairs(Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.AssemblyLinearVelocity = Vector3.zero
+                part.AssemblyAngularVelocity = Vector3.zero
+            end
+        end
+    end
+
+    pcall(function()
+        local currentFPDH = workspace.FallenPartsDestroyHeight
+        if currentFPDH ~= currentFPDH or currentFPDH == 0/0 then
+            workspace.FallenPartsDestroyHeight = savedFPDH or -500
+        end
+    end)
+end
+
+local function SkidFling(TargetPlayer)
+    if currentFlingState.active then
+        stopFling(currentFlingState)
+        task.wait(0.1)
+    end
+
+    currentFlingState = { active = true }
+    local State = currentFlingState
+
+    local Character = LocalPlayer.Character
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+    local RootPart = Humanoid and Humanoid.RootPart
+    local TCharacter = TargetPlayer and TargetPlayer.Character
+
+    if not TCharacter or not Character or not Humanoid or not RootPart then return end
+
+    local THumanoid = TCharacter:FindFirstChildOfClass("Humanoid")
+    local TRootPart = THumanoid and THumanoid.RootPart
+    local THead = TCharacter:FindFirstChild("Head")
+
+    if THumanoid and THumanoid.Sit then return end
+    if not TCharacter:FindFirstChildWhichIsA("BasePart") then return end
+
+    if THead then
+        workspace.CurrentCamera.CameraSubject = THead
+    elseif THumanoid then
+        workspace.CurrentCamera.CameraSubject = THumanoid
+    end
+
+    if RootPart.Velocity.Magnitude < 50 then
+        currentFlingOldPos = RootPart.CFrame
+    end
+
+    currentSavedFPDH = workspace.FallenPartsDestroyHeight
+    workspace.FallenPartsDestroyHeight = 0 / 0
+
+    local safeY = currentFlingOldPos and currentFlingOldPos.Position.Y or 0
+    local voidWatchdog
+    voidWatchdog = RunService.Heartbeat:Connect(function()
+        if not State.active or not RootPart or not RootPart.Parent then 
+            if voidWatchdog then voidWatchdog:Disconnect() end
+            return 
+        end
+        if RootPart.Position.Y < safeY - 300 then
+            pcall(function()
+                RootPart.CFrame = CFrame.new(RootPart.Position.X, safeY + 10, RootPart.Position.Z)
+                RootPart.AssemblyLinearVelocity = Vector3.zero
+                RootPart.AssemblyAngularVelocity = Vector3.zero
+            end)
+        end
+    end)
+
+    local baseV = 9e7 * Tune.Power
+    local baseRV = 9e8 * Tune.Power
+    local D = math.max(1, math.floor(Tune.Density))
+
+    local function hit(BasePart, offsetY, offsetZ)
+        if not State.active then return end
+        local targetCF = CFrame.new(BasePart.Position + Vector3.new(0, offsetY, offsetZ))
+        RootPart.CFrame = targetCF
+        Character:PivotTo(targetCF)
+        RootPart.AssemblyLinearVelocity = Vector3.new(baseV, baseV, baseV)
+        RootPart.AssemblyAngularVelocity = Vector3.new(baseRV, baseRV, baseRV)
+    end
+
+    local function SFBasePart(BasePart)
+        local t0 = tick()
+        local up = true
+        repeat
+            if not State.active or not RootPart or not THumanoid or not RootPart.Parent then break end
+            local yOff = up and 1.5 or -1.5
+            up = not up
+            for _ = 1, D do
+                if not State.active then break end
+                hit(BasePart, yOff, 0)
+                RunService.Stepped:Wait()
+                if not RootPart.Parent then break end
+            end
+        until tick() > t0 + Tune.Duration or not State.active
+    end
+
+    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+
+    if TRootPart then
+        SFBasePart(TRootPart)
+    elseif THead then
+        SFBasePart(THead)
+    end
+
+    stopFling(State)
+    if voidWatchdog then voidWatchdog:Disconnect() end
+    unFling(currentFlingOldPos, currentSavedFPDH)
+end
+
+-- Logic Auto Bypass AC
+local function StartAutoBypassAC()
+    local targetPos = Vector3.new(-120, 210, -200)
+
+    bypassACThread = task.spawn(function()
+        while bypassACEnabled do
+            local char = LocalPlayer.Character
+            if not char or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChild("Humanoid") then
+                task.wait(1)
+                continue
+            end
+
+            if char.Humanoid.Health <= 0 then
+                LocalPlayer.CharacterAdded:Wait()
+                task.wait(1)
+                continue
+            end
+
+            local hrp = char.HumanoidRootPart
+            for _, p in pairs(char:GetChildren()) do
+                if p:IsA("BasePart") then p.CanCollide = false end
+            end
+
+            hrp.CFrame = CFrame.new(targetPos)
+
+            task.wait(0.5)
+
+            if not bypassACEnabled then break end
+
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local currentPos = char.HumanoidRootPart.Position
+                local distToTarget = (currentPos - targetPos).Magnitude
+
+                if distToTarget < 15 then
+                    Fluent:Notify({ Title = "Bypass AC", Content = "Thành công!", Duration = 3 })
+                    bypassACEnabled = false
+                    break
+                else
+                    pcall(function()
+                        ReplicatedStorage.Knit.Knit.Services.JoinService.RE.Reset:FireServer()
+                    end)
+                    LocalPlayer.CharacterAdded:Wait()
+                    task.wait(2)
+                end
+            end
+        end
+    end)
+end
+
+----------------------------------------------------
+-- CREATING FLUENT WINDOW & TABS
+----------------------------------------------------
+local Window = Fluent:CreateWindow({
+    Title = "Sigma Hub",
+    SubTitle = "Jujutsu Shenanigans",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 420),
+    Acrylic = true,
+    Theme = "Dark"
+})
+
+local Tabs = {
+    Main = Window:AddTab({ Title = "Main", Icon = "home" }),
+    Characters = Window:AddTab({ Title = "Characters", Icon = "user" }),
+    Combat = Window:AddTab({ Title = "Combat", Icon = "swords" }),
+    TP = Window:AddTab({ Title = "TP Locations", Icon = "map-pin" }),
+    ESP = Window:AddTab({ Title = "ESP", Icon = "eye" }),
+    Fun = Window:AddTab({ Title = "Fun", Icon = "smile" }),
+    Misc = Window:AddTab({ Title = "Misc", Icon = "more-horizontal" })
+}
+
+----------------------------------------------------
+-- MOBILE TOGGLE BUTTON (MÀU XANH LÁ ĐẬM)
+----------------------------------------------------
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SigmaToggleGui"
+screenGui.ResetOnSpawn = false
+
+pcall(function()
+    screenGui.Parent = CoreGui
+end)
+if not screenGui.Parent then
+    screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Name = "ToggleMenuBtn"
+toggleBtn.Parent = screenGui
+toggleBtn.Size = UDim2.fromOffset(55, 55)
+toggleBtn.Position = UDim2.new(0, 15, 0.4, 0)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(20, 100, 40) -- Màu xanh lá đậm
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.Text = "UI"
+toggleBtn.TextSize = 18
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.Active = true
+toggleBtn.Draggable = true
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(1, 0) -- Bo tròn thành hình cầu
+corner.Parent = toggleBtn
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(40, 180, 70)
+stroke.Thickness = 2
+stroke.Parent = toggleBtn
+
+toggleBtn.MouseButton1Click:Connect(function()
+    if VirtualInputManager then
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
+    else
+        -- Fallback bật/tắt thủ công cho UI
+        Window:Minimize()
+    end
+end)
+
+----------------------------------------------------
+-- MAIN TAB
+----------------------------------------------------
+Tabs.Main:AddToggle("SpeedToggle", {
+    Title = "Speed",
+    Default = false,
+    Callback = function(Value)
+        speedEnabled = Value
+        if speedEnabled then
+            speedConnection = RunService.RenderStepped:Connect(function()
+                local char = LocalPlayer.Character
+                if char and char:FindFirstChild("Humanoid") and char:FindFirstChild("HumanoidRootPart") then
+                    if char.Humanoid.MoveDirection.Magnitude > 0 then
+                        char:TranslateBy(char.Humanoid.MoveDirection * 0.8)
+                    end
+                end
+            end)
+        else
+            if speedConnection then speedConnection:Disconnect() end
+        end
+    end
+})
+
+Tabs.Main:AddToggle("NoclipToggle", {
+    Title = "Noclip",
+    Default = false,
+    Callback = function(Value)
+        noclipEnabled = Value
+        if noclipEnabled then
+            noclipConnection = RunService.Stepped:Connect(function()
+                if LocalPlayer.Character then
+                    for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then part.CanCollide = false end
+                    end
+                end
+            end)
+        else
+            if noclipConnection then noclipConnection:Disconnect() end
+        end
+    end
+})
+
+Tabs.Main:AddButton({
+    Title = "Server Hop",
+    Callback = function()
+        Fluent:Notify({ Title = "Server Hop", Content = "Đang tìm server...", Duration = 3 })
+        local placeId = game.PlaceId
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100")).data
+        end)
+        if success and result then
+            for _, s in pairs(result) do
+                if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                    TeleportService:TeleportToPlaceInstance(placeId, s.id, LocalPlayer)
+                    break
+                end
+            end
+        end
+    end
+})
+
+----------------------------------------------------
+-- CHARACTERS TAB
+----------------------------------------------------
+local yujiScriptLoaded = false
+Tabs.Characters:AddToggle("YujiToggle", {
+    Title = "Yuji Mode",
+    Default = false,
+    Callback = function(Value)
+        if Value and not yujiScriptLoaded then
+            yujiScriptLoaded = true
+            pcall(function()
+                loadstring(game:HttpGet("https://pastebin.com/raw/aiy3qDuu"))()
+            end)
+        end
+    end
+})
+
+----------------------------------------------------
+-- COMBAT TAB
+----------------------------------------------------
+Tabs.Combat:AddToggle("BypassACToggle", {
+    Title = "Auto Bypass AC",
+    Default = false,
+    Callback = function(Value)
+        bypassACEnabled = Value
+        if bypassACEnabled then
+            StartAutoBypassAC()
+        else
+            if bypassACThread then
+                task.cancel(bypassACThread)
+                bypassACThread = nil
+            end
+        end
+    end
+})
+
+Tabs.Combat:AddInput("OrbitInput", {
+    Title = "Mục tiêu Orbit",
+    Placeholder = "Nhập tên người chơi...",
+    Callback = function(text)
+        orbitTargetInputText = text
+    end
+})
+
+Tabs.Combat:AddToggle("OrbitToggle", {
+    Title = "Bật/Tắt Orbit Target",
+    Default = false,
+    Callback = function(Value)
+        orbitEnabled = Value
+        if orbitEnabled then
+            orbitTargetPlayer = nil
+            if orbitTargetInputText ~= "" then
+                local name = orbitTargetInputText:lower()
+                for _, p in pairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer and (p.Name:lower():find(name) or p.DisplayName:lower():find(name)) then
+                        orbitTargetPlayer = p
+                        break
+                    end
+                end
+            else
+                local closestObj = GetClosestTarget()
+                if closestObj then orbitTargetPlayer = closestObj end
+            end
+
+            if not orbitTargetPlayer or not orbitTargetPlayer.Character or not orbitTargetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                orbitEnabled = false
+                return
+            end
+
+            if orbitConnection then orbitConnection:Disconnect() end
+
+            orbitConnection = RunService.RenderStepped:Connect(function(deltaTime)
+                if not orbitEnabled or not orbitTargetPlayer or not orbitTargetPlayer.Character or not orbitTargetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    return
+                end
+
+                local myChar = LocalPlayer.Character
+                if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+
+                local targetHrp = orbitTargetPlayer.Character.HumanoidRootPart
+                orbitAngle = orbitAngle + (orbitSpeed * 0.1 * deltaTime * 60)
+                local offsetX = math.cos(orbitAngle) * orbitDistance
+                local offsetZ = math.sin(orbitAngle) * orbitDistance
+
+                local newPos = targetHrp.Position + Vector3.new(offsetX, 0, offsetZ)
+                myChar.HumanoidRootPart.CFrame = CFrame.new(newPos, targetHrp.Position)
+            end)
+        else
+            if orbitConnection then
+                orbitConnection:Disconnect()
+                orbitConnection = nil
+            end
+        end
+    end
+})
+
+Tabs.Combat:AddSlider("OrbitSpeedSlider", {
+    Title = "Tốc độ Orbit",
+    Min = 1,
+    Max = 100,
+    Default = 20,
+    Rounding = 0,
+    Callback = function(Value) orbitSpeed = Value end
+})
+
+Tabs.Combat:AddSlider("OrbitDistSlider", {
+    Title = "Khoảng cách Orbit",
+    Min = 1,
+    Max = 20,
+    Default = 5,
+    Rounding = 0,
+    Callback = function(Value) orbitDistance = Value end
+})
+
+Tabs.Combat:AddToggle("KillAllGojoToggle", {
+    Title = "0.2 Kill All Gojo Sweep",
+    Default = false,
+    Callback = function(Value)
+        auto02sUltEnabled = Value
+        if auto02sUltEnabled then
+            local targetIndex = 1
+            gojoLoopConnection = RunService.Heartbeat:Connect(function()
+                if not auto02sUltEnabled then return end
+                local myChar = LocalPlayer.Character
+                if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+
+                local playerList = {}
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") then
+                        if p.Character.Humanoid.Health > 0 then
+                            table.insert(playerList, p)
+                        end
+                    end
+                end
+
+                if #playerList > 0 then
+                    if targetIndex > #playerList then targetIndex = 1 end
+                    local targetPlayer = playerList[targetIndex]
+                    if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        local targetHrp = targetPlayer.Character.HumanoidRootPart
+                        myChar.HumanoidRootPart.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 0.5)
+                        
+                        pcall(function()
+                            ReplicatedStorage.Knit.Knit.Services.GojoService.RE.Ultimate:FireServer()
+                            ReplicatedStorage.Knit.Knit.Services.GojoService.RE.RightActivated:FireServer(nil)
+                        end)
+                    end
+                    targetIndex = targetIndex + 1
+                end
+            end)
+        else
+            if gojoLoopConnection then
+                gojoLoopConnection:Disconnect()
+                gojoLoopConnection = nil
+            end
+        end
+    end
+})
+
+----------------------------------------------------
+-- TP LOCATIONS TAB
+----------------------------------------------------
+local jjsLocations = {
+    {"Main Spawn Area", Vector3.new(0, 10, 0)},
+    {"Rooftop Area", Vector3.new(-50, 85, -120)},
+    {"Park Area", Vector3.new(120, 10, -80)},
+    {"School Yard", Vector3.new(-150, 10, 100)},
+    {"Destroyed City Zone", Vector3.new(200, 10, 150)},
+    {"Safe Sky Zone", Vector3.new(0, 500, 0)}
+}
+
+for _, loc in ipairs(jjsLocations) do
+    Tabs.TP:AddButton({
+        Title = loc[1],
+        Callback = function()
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                char.HumanoidRootPart.CFrame = CFrame.new(loc[2])
+            end
+        end
+    })
+end
+
+----------------------------------------------------
+-- ESP TAB
+----------------------------------------------------
+Tabs.ESP:AddToggle("ESP2DToggle", {
+    Title = "ESP 2D Box",
+    Default = false,
+    Callback = function(Value) esp2DEnabled = Value end
+})
+
+Tabs.ESP:AddToggle("ESPSkeletonToggle", {
+    Title = "ESP Skeleton",
+    Default = false,
+    Callback = function(Value) skeletonEnabled = Value end
+})
+
+----------------------------------------------------
+-- FUN TAB
+----------------------------------------------------
+Tabs.Fun:AddInput("FlingInput", {
+    Title = "Mục tiêu Fling",
+    Placeholder = "Nhập tên hoặc để trống (người gần nhất)...",
+    Callback = function(text)
+        flingTargetInputText = text
+    end
+})
+
+Tabs.Fun:AddButton({
+    Title = "Fling Target",
+    Callback = function()
+        local targetPlayer = nil
+        if flingTargetInputText ~= "" then
+            local name = flingTargetInputText:lower()
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and (p.Name:lower():find(name) or p.DisplayName:lower():find(name)) then
+                    targetPlayer = p
+                    break
+                end
+            end
+        else
+            targetPlayer = GetClosestTarget()
+        end
+
+        if targetPlayer then
+            Fluent:Notify({ Title = "Fling", Content = "Đang Fling: " .. targetPlayer.Name, Duration = 3 })
+            task.spawn(function()
+                SkidFling(targetPlayer)
+            end)
+        else
+            Fluent:Notify({ Title = "Fling", Content = "Không tìm thấy người chơi!", Duration = 3 })
+        end
+    end
+})
+
+Tabs.Fun:AddButton({
+    Title = "Stop Fling (Un-Fling)",
+    Callback = function()
+        if currentFlingState.active then
+            stopFling(currentFlingState)
+            unFling(currentFlingOldPos, currentSavedFPDH)
+            Fluent:Notify({ Title = "Un-Fling", Content = "Đã ngắt Fling!", Duration = 3 })
+        else
+            unFling(currentFlingOldPos, currentSavedFPDH)
+            Fluent:Notify({ Title = "Un-Fling", Content = "Đã làm sạch trạng thái!", Duration = 3 })
+        end
+    end
+})
+
+Tabs.Fun:AddToggle("SocLoToggle", {
+    Title = "Sóc Lọ",
+    Default = false,
+    Callback = function(Value)
+        socLoDoing = Value
+        if socLoDoing then
+            socLoThread = task.spawn(function()
+                while socLoDoing do
+                    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+                    local humanoid = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid")
+                    
+                    local rigType = humanoid.RigType == Enum.HumanoidRigType.R15 and "R15" or "R6"
+                    local animation = Instance.new("Animation")
+                    animation.Name = "aaa"
+                    animation.Parent = workspace
+                    animation.AnimationId = rigType == "R15" and "rbxassetid://698251653" or "rbxassetid://72042024"
+
+                    local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid:WaitForChild("Animator")
+                    if not socLoAnimTrack and animator then
+                        socLoAnimTrack = animator:LoadAnimation(animation)
+                    end
+
+                    if socLoAnimTrack then
+                        socLoAnimTrack:Play()
+                        socLoAnimTrack:AdjustSpeed(0.7)
+                        socLoAnimTrack.TimePosition = 0.6
+                        task.wait(0.1)
+
+                        while socLoDoing and socLoAnimTrack and socLoAnimTrack.TimePosition < 0.7 do
+                            task.wait(0.05)
+                        end
+
+                        if socLoAnimTrack then
+                            socLoAnimTrack:Stop()
+                            socLoAnimTrack:Destroy()
+                            socLoAnimTrack = nil
+                        end
+                    end
+                    animation:Destroy()
+                end
+            end)
+        else
+            if socLoAnimTrack then
+                socLoAnimTrack:Stop()
+                socLoAnimTrack:Destroy()
+                socLoAnimTrack = nil
+            end
+            if socLoThread then
+                task.cancel(socLoThread)
+                socLoThread = nil
+            end
+        end
+    end
+})
+
+----------------------------------------------------
+-- MISC TAB
+----------------------------------------------------
+Tabs.Misc:AddToggle("InvisibleToggle", {
+    Title = "Invisible",
+    Default = false,
+    Callback = function(Value)
+        invisibleEnabled = Value
+        local char = LocalPlayer.Character
+        if not char then return end
+
+        if invisibleEnabled then
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") or part:IsA("Decal") then
+                    originalTransparencies[part] = part.Transparency
+                    part.Transparency = 1
+                end
+            end
+        else
+            for part, trans in pairs(originalTransparencies) do
+                if part and part.Parent then part.Transparency = trans end
+            end
+            table.clear(originalTransparencies)
+        end
+    end
+})
+
+Window:SelectTab(1)
