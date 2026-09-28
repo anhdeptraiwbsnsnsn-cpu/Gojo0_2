@@ -22,6 +22,7 @@ local originalTransparencies = {}
 -- Bypass AC Variables
 local bypassACEnabled = false
 local bypassACThread = nil
+local bypassACToggleObj = nil -- Lưu reference tới Toggle UI
 
 -- Fun Tab Variables
 local socLoDoing = false
@@ -196,7 +197,7 @@ local function SkidFling(TargetPlayer)
     unFling(currentFlingOldPos, currentSavedFPDH)
 end
 
--- Logic Auto Bypass AC
+-- Logic Auto Bypass AC (Tự động ngắt khi thành công)
 local function StartAutoBypassAC()
     local targetPos = Vector3.new(-120, 210, -200)
 
@@ -231,7 +232,12 @@ local function StartAutoBypassAC()
 
                 if distToTarget < 15 then
                     Fluent:Notify({ Title = "Bypass AC", Content = "Thành công!", Duration = 3 })
+                    
+                    -- Tắt trạng thái và cập nhật UI Toggle về off
                     bypassACEnabled = false
+                    if bypassACToggleObj then
+                        bypassACToggleObj:SetValue(false)
+                    end
                     break
                 else
                     pcall(function()
@@ -295,7 +301,7 @@ toggleBtn.Active = true
 toggleBtn.Draggable = true
 
 local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(1, 0) -- Bo tròn thành hình cầu
+corner.CornerRadius = UDim.new(1, 0)
 corner.Parent = toggleBtn
 
 local stroke = Instance.new("UIStroke")
@@ -308,7 +314,6 @@ toggleBtn.MouseButton1Click:Connect(function()
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
     else
-        -- Fallback bật/tắt thủ công cho UI
         Window:Minimize()
     end
 end)
@@ -394,7 +399,7 @@ Tabs.Characters:AddToggle("YujiToggle", {
 ----------------------------------------------------
 -- COMBAT TAB
 ----------------------------------------------------
-Tabs.Combat:AddToggle("BypassACToggle", {
+bypassACToggleObj = Tabs.Combat:AddToggle("BypassACToggle", {
     Title = "Auto Bypass AC",
     Default = false,
     Callback = function(Value)
