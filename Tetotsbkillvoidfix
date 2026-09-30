@@ -3,6 +3,7 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
 --------------------------------------------------------------------------------
@@ -60,7 +61,7 @@ if LocalPlayer.Character then preventVoidDeath(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(preventVoidDeath)
 
 --------------------------------------------------------------------------------
--- 2. GIAO DIỆN GUI FIX LỖI TỐI ĐA (MOBILE FRIENDLY)
+-- 2. GIAO DIỆN GUI
 --------------------------------------------------------------------------------
 pcall(function()
     if CoreGui:FindFirstChild("TETOKILLVOIDTSB_Gui") then
@@ -81,14 +82,13 @@ if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("Player
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 180, 0, 220)
-MainFrame.Position = UDim2.new(0.5, -90, 0.3, 0)
+MainFrame.Position = UDim2.new(0.05, 0, 0.25, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
 MainFrame.BorderSizePixel = 2
 MainFrame.Active = true
 MainFrame.Parent = ScreenGui
 
--- Tiêu đề
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -30, 0, 30)
 Title.Position = UDim2.new(0, 0, 0, 0)
@@ -102,7 +102,6 @@ Title.TextSize = 13
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = MainFrame
 
--- Kéo thả Menu trên Mobile/PC
 local dragging, dragStart, startPos
 Title.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -124,7 +123,6 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Tạo nút bấm gắn trực tiếp vào MainFrame
 local function createMenuButton(text, yPos, color)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0.9, 0, 0, 36)
@@ -140,12 +138,11 @@ local function createMenuButton(text, yPos, color)
     return btn
 end
 
-local StartButton = createMenuButton("SUIRYU VOID: OFF", 38, Color3.fromRGB(255, 50, 50))
+local StartButton = createMenuButton("SUIRYU VOID", 38, Color3.fromRGB(255, 255, 255))
 local GarouButton = createMenuButton("GAROU TP VOID", 80, Color3.fromRGB(255, 255, 255))
 local FarmUltButton = createMenuButton("FARM ULT: OFF", 122, Color3.fromRGB(255, 50, 50))
 local HitboxButton = createMenuButton("HITBOX 20%: OFF", 164, Color3.fromRGB(255, 50, 50))
 
--- Nút Thu gọn (-)
 local ToggleButton = Instance.new("TextButton")
 ToggleButton.Size = UDim2.new(0, 30, 0, 30)
 ToggleButton.Position = UDim2.new(1, -30, 0, 0)
@@ -201,6 +198,7 @@ local function getTargetPlayer()
     return nil
 end
 
+-- Bám sát mục tiêu 0.1 stud trong duration giây
 local function stickToTarget(target, duration)
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -218,7 +216,8 @@ local function stickToTarget(target, duration)
     conn = RunService.RenderStepped:Connect(function()
         if (tick() - startTime) < duration and targetHrp and hrp and target.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
             stopVelocity(hrp)
-            hrp.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 0.05)
+            -- Bám chặt ở khoảng cách 0.1 stud
+            hrp.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 0.1)
         else
             conn:Disconnect()
         end
@@ -228,31 +227,35 @@ local function stickToTarget(target, duration)
     if conn then conn:Disconnect() end
 end
 
+-- Tự động kích hoạt Skill 2
+local function autoUseSkill2()
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Two, false, game)
+        task.wait(0.05)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Two, false, game)
+    end)
+end
+
 --------------------------------------------------------------------------------
--- 4. LOGIC SUIRYU VOID KILL (BẬT ON -> BẤM SKILL 2 SẼ TP)
+-- 4. LOGIC SUIRYU VOID (BẤM 1 LẦN -> THỰC HIỆN 1 LẦN)
 --------------------------------------------------------------------------------
-local suiryuVoidEnabled = false
+local isExecutingSuiryu = false
 
-StartButton.MouseButton1Click:Connect(function()
-    suiryuVoidEnabled = not suiryuVoidEnabled
-    if suiryuVoidEnabled then
-        StartButton.Text = "SUIRYU VOID: ON"
-        StartButton.TextColor3 = Color3.fromRGB(50, 255, 50)
-    else
-        StartButton.Text = "SUIRYU VOID: OFF"
-        StartButton.TextColor3 = Color3.fromRGB(255, 50, 50)
-    end
-end)
+local function runSuiryuVoidOnce()
+    if isExecutingSuiryu then return end
+    isExecutingSuiryu = true
+    StartButton.Text = "RUNNING..."
+    StartButton.TextColor3 = Color3.fromRGB(255, 255, 0)
 
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if suiryuVoidEnabled and input.KeyCode == Enum.KeyCode.Two then
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
+    -- Tự động bấm skill 2
+    autoUseSkill2()
+    task.wait(0.05)
 
-        task.wait(0.1)
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
+    if hrp then
+        -- Tìm tối đa 6 người chơi
         local targetPlayers = {}
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
@@ -264,16 +267,24 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             end
         end
 
+        -- Bám chặt từng người 0.2s ở cự cự 0.1 stud
         for _, target in ipairs(targetPlayers) do
             stickToTarget(target, 0.2)
         end
 
+        -- Dịch chuyển xuống Void
         stopVelocity(hrp)
         hrp.CFrame = CFrame.new(0, -9995, 0)
         task.wait(0.05)
         stopVelocity(hrp)
     end
-end)
+
+    StartButton.Text = "SUIRYU VOID"
+    StartButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    isExecutingSuiryu = false
+end
+
+StartButton.MouseButton1Click:Connect(runSuiryuVoidOnce)
 
 --------------------------------------------------------------------------------
 -- 5. LOGIC FARM ULT
