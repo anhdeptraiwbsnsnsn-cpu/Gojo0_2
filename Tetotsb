@@ -1,0 +1,390 @@
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+--------------------------------------------------------------------------------
+-- 1. CHỐNG CHẾT VOID & BỆ ĐỨNG
+--------------------------------------------------------------------------------
+pcall(function()
+    Workspace.FallenPartsDestroyHeight = -999999999
+end)
+
+Workspace:GetPropertyChangedSignal("FallenPartsDestroyHeight"):Connect(function()
+    pcall(function()
+        Workspace.FallenPartsDestroyHeight = -999999999
+    end)
+end)
+
+local curterPlate = Workspace:FindFirstChild("AntiDeathCurterPlatform")
+if not curterPlate then
+    curterPlate = Instance.new("Part")
+    curterPlate.Name = "AntiDeathCurterPlatform"
+    curterPlate.Size = Vector3.new(2000, 10, 2000)
+    curterPlate.Position = Vector3.new(0, -10005, 0)
+    curterPlate.Anchored = true
+    curterPlate.CanCollide = true
+    curterPlate.Color = Color3.fromRGB(100, 100, 100)
+    curterPlate.Material = Enum.Material.SmoothPlastic
+    curterPlate.Parent = Workspace
+end
+
+local voidKillPlate = Workspace:FindFirstChild("SuiryuVoidKillPlatform")
+if not voidKillPlate then
+    voidKillPlate = Instance.new("Part")
+    voidKillPlate.Name = "SuiryuVoidKillPlatform"
+    voidKillPlate.Size = Vector3.new(1000, 10, 1000)
+    voidKillPlate.Position = Vector3.new(0, -10000, 0)
+    voidKillPlate.Anchored = true
+    voidKillPlate.CanCollide = true
+    voidKillPlate.Color = Color3.fromRGB(128, 128, 128)
+    voidKillPlate.Material = Enum.Material.SmoothPlastic
+    voidKillPlate.Parent = Workspace
+end
+
+local function preventVoidDeath(character)
+    local humanoid = character:WaitForChild("Humanoid", 5)
+    if humanoid then
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+        humanoid.HealthChanged:Connect(function(health)
+            if health <= 0 then
+                humanoid.Health = humanoid.MaxHealth
+            end
+        end)
+    end
+end
+
+if LocalPlayer.Character then preventVoidDeath(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(preventVoidDeath)
+
+--------------------------------------------------------------------------------
+-- 2. GIAO DIỆN GUI FIX LỖI TỐI ĐA (MOBILE FRIENDLY)
+--------------------------------------------------------------------------------
+pcall(function()
+    if CoreGui:FindFirstChild("TETOKILLVOIDTSB_Gui") then
+        CoreGui.TETOKILLVOIDTSB_Gui:Destroy()
+    end
+    if LocalPlayer.PlayerGui:FindFirstChild("TETOKILLVOIDTSB_Gui") then
+        LocalPlayer.PlayerGui.TETOKILLVOIDTSB_Gui:Destroy()
+    end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TETOKILLVOIDTSB_Gui"
+ScreenGui.ResetOnSpawn = false
+
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 180, 0, 220)
+MainFrame.Position = UDim2.new(0.5, -90, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
+MainFrame.BorderSizePixel = 2
+MainFrame.Active = true
+MainFrame.Parent = ScreenGui
+
+-- Tiêu đề
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -30, 0, 30)
+Title.Position = UDim2.new(0, 0, 0, 0)
+Title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Title.BorderColor3 = Color3.fromRGB(255, 255, 255)
+Title.BorderSizePixel = 1
+Title.Text = " TETOKILLVOIDTSB"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 13
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = MainFrame
+
+-- Kéo thả Menu trên Mobile/PC
+local dragging, dragStart, startPos
+Title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Tạo nút bấm gắn trực tiếp vào MainFrame
+local function createMenuButton(text, yPos, color)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.9, 0, 0, 36)
+    btn.Position = UDim2.new(0.05, 0, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    btn.BorderColor3 = Color3.fromRGB(255, 255, 255)
+    btn.BorderSizePixel = 1
+    btn.Text = text
+    btn.TextColor3 = color
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 12
+    btn.Parent = MainFrame
+    return btn
+end
+
+local StartButton = createMenuButton("SUIRYU VOID: OFF", 38, Color3.fromRGB(255, 50, 50))
+local GarouButton = createMenuButton("GAROU TP VOID", 80, Color3.fromRGB(255, 255, 255))
+local FarmUltButton = createMenuButton("FARM ULT: OFF", 122, Color3.fromRGB(255, 50, 50))
+local HitboxButton = createMenuButton("HITBOX 20%: OFF", 164, Color3.fromRGB(255, 50, 50))
+
+-- Nút Thu gọn (-)
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0, 30, 0, 30)
+ToggleButton.Position = UDim2.new(1, -30, 0, 0)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+ToggleButton.BorderColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.BorderSizePixel = 1
+ToggleButton.Text = "-"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.TextSize = 16
+ToggleButton.Parent = MainFrame
+
+local isCollapsed = false
+ToggleButton.MouseButton1Click:Connect(function()
+    isCollapsed = not isCollapsed
+    StartButton.Visible = not isCollapsed
+    GarouButton.Visible = not isCollapsed
+    FarmUltButton.Visible = not isCollapsed
+    HitboxButton.Visible = not isCollapsed
+    
+    if isCollapsed then
+        MainFrame.Size = UDim2.new(0, 180, 0, 30)
+        ToggleButton.Text = "+"
+    else
+        MainFrame.Size = UDim2.new(0, 180, 0, 220)
+        ToggleButton.Text = "-"
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- 3. HÀM XỬ LÝ CHUNG
+--------------------------------------------------------------------------------
+local function stopVelocity(hrp)
+    if hrp then
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+    end
+end
+
+local function getTargetPlayer()
+    local validPlayers = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                table.insert(validPlayers, p)
+            end
+        end
+    end
+    if #validPlayers > 0 then
+        return validPlayers[math.random(1, #validPlayers)]
+    end
+    return nil
+end
+
+local function stickToTarget(target, duration)
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local targetHrp = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+    
+    if not hrp or not targetHrp then return end
+
+    for _, part in ipairs(char:GetChildren()) do
+        if part:IsA("BasePart") then part.CanCollide = false end
+    end
+
+    local startTime = tick()
+    local conn
+    
+    conn = RunService.RenderStepped:Connect(function()
+        if (tick() - startTime) < duration and targetHrp and hrp and target.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
+            stopVelocity(hrp)
+            hrp.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 0.05)
+        else
+            conn:Disconnect()
+        end
+    end)
+
+    task.wait(duration)
+    if conn then conn:Disconnect() end
+end
+
+--------------------------------------------------------------------------------
+-- 4. LOGIC SUIRYU VOID KILL (BẬT ON -> BẤM SKILL 2 SẼ TP)
+--------------------------------------------------------------------------------
+local suiryuVoidEnabled = false
+
+StartButton.MouseButton1Click:Connect(function()
+    suiryuVoidEnabled = not suiryuVoidEnabled
+    if suiryuVoidEnabled then
+        StartButton.Text = "SUIRYU VOID: ON"
+        StartButton.TextColor3 = Color3.fromRGB(50, 255, 50)
+    else
+        StartButton.Text = "SUIRYU VOID: OFF"
+        StartButton.TextColor3 = Color3.fromRGB(255, 50, 50)
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if suiryuVoidEnabled and input.KeyCode == Enum.KeyCode.Two then
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        task.wait(0.1)
+
+        local targetPlayers = {}
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                local tHumanoid = p.Character:FindFirstChildOfClass("Humanoid")
+                if tHumanoid and tHumanoid.Health > 0 then
+                    table.insert(targetPlayers, p)
+                    if #targetPlayers >= 6 then break end
+                end
+            end
+        end
+
+        for _, target in ipairs(targetPlayers) do
+            stickToTarget(target, 0.2)
+        end
+
+        stopVelocity(hrp)
+        hrp.CFrame = CFrame.new(0, -9995, 0)
+        task.wait(0.05)
+        stopVelocity(hrp)
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- 5. LOGIC FARM ULT
+--------------------------------------------------------------------------------
+local farmUltEnabled = false
+local farmTarget = nil
+
+RunService.Stepped:Connect(function()
+    if farmUltEnabled then
+        local myChar = LocalPlayer.Character
+        local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+
+        if not farmTarget or not farmTarget.Character or not farmTarget.Character:FindFirstChild("HumanoidRootPart") or (farmTarget.Character:FindFirstChildOfClass("Humanoid") and farmTarget.Character:FindFirstChildOfClass("Humanoid").Health <= 0) then
+            farmTarget = getTargetPlayer()
+        end
+
+        if farmTarget and farmTarget.Character and myHrp then
+            local targetHrp = farmTarget.Character:FindFirstChild("HumanoidRootPart")
+            if targetHrp then
+                for _, part in ipairs(myChar:GetChildren()) do
+                    if part:IsA("BasePart") then part.CanCollide = false end
+                end
+                stopVelocity(myHrp)
+
+                local backPos = targetHrp.CFrame * CFrame.new(0, 1.5, 4)
+                local lookCFrame = CFrame.lookAt(backPos.Position, targetHrp.Position) * CFrame.Angles(math.rad(-45), 0, 0)
+                
+                myHrp.CFrame = lookCFrame
+            end
+        end
+    end
+end)
+
+FarmUltButton.MouseButton1Click:Connect(function()
+    farmUltEnabled = not farmUltEnabled
+    if farmUltEnabled then
+        farmTarget = getTargetPlayer()
+        FarmUltButton.Text = "FARM ULT: ON"
+        FarmUltButton.TextColor3 = Color3.fromRGB(50, 255, 50)
+    else
+        farmTarget = nil
+        FarmUltButton.Text = "FARM ULT: OFF"
+        FarmUltButton.TextColor3 = Color3.fromRGB(255, 50, 50)
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- 6. HITBOX BUG 20%
+--------------------------------------------------------------------------------
+local hitboxEnabled = false
+
+RunService.RenderStepped:Connect(function()
+    if hitboxEnabled then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    pcall(function()
+                        hrp.Size = Vector3.new(2.4, 2.4, 1.2)
+                        hrp.Transparency = 0.7
+                        hrp.Color = Color3.fromRGB(255, 0, 0)
+                        hrp.Material = Enum.Material.ForceField
+                        hrp.CanCollide = false
+                    end)
+                end
+            end
+        end
+    end
+end)
+
+HitboxButton.MouseButton1Click:Connect(function()
+    hitboxEnabled = not hitboxEnabled
+    if hitboxEnabled then
+        HitboxButton.Text = "HITBOX 20%: ON"
+        HitboxButton.TextColor3 = Color3.fromRGB(50, 255, 50)
+    else
+        HitboxButton.Text = "HITBOX 20%: OFF"
+        HitboxButton.TextColor3 = Color3.fromRGB(255, 50, 50)
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    pcall(function()
+                        hrp.Size = Vector3.new(2, 2, 1)
+                        hrp.Transparency = 1
+                    end)
+                end
+            end
+        end
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- 7. LOGIC GAROU TP VOID
+--------------------------------------------------------------------------------
+local isExecutingGarou = false
+GarouButton.MouseButton1Click:Connect(function()
+    if isExecutingGarou then return end
+    isExecutingGarou = true
+    GarouButton.Text = "TELEPORTING..."
+
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+    if hrp then
+        stopVelocity(hrp)
+        hrp.CFrame = CFrame.new(0, -9995, 0)
+        task.wait(0.05)
+        stopVelocity(hrp)
+    end
+
+    isExecutingGarou = false
+    GarouButton.Text = "GAROU TP VOID"
+end)
